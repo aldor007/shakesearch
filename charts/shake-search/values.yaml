@@ -49,6 +49,10 @@ ingress:
     - host: shake-search.k8s.m39
       paths:
       - /
+    - host: "shakesearch.mkaciuba.com"
+      paths:
+      - /
+
   tls: []
   #  - secretName: chart-example-tls
   #    hosts:
