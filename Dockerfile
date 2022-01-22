@@ -1,6 +1,6 @@
 FROM golang:1.15
 ADD . /go/src
-
+WORKDIR /go/src
 
 RUN cd /go/src/ ;go mod download; go build -o shake-search main.go
 
