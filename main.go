@@ -9,7 +9,16 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
+	"strconv"
+     "regexp"
+
+
+	"github.com/karlseguin/ccache/v2"
 )
+
+var cache = ccache.New(ccache.Configure().MaxSize(1000).ItemsToPrune(100))
+var resultLimit = 10
 
 func main() {
 	searcher := Searcher{}
@@ -40,6 +49,27 @@ type Searcher struct {
 	SuffixArray   *suffixarray.Index
 }
 
+type APIResponse struct {
+	Result []string `json:"results"`
+	ResultCount int `json:"resultCount"`
+	Limit int `json:"resultLimit"`
+	Page int `json:"page"`
+	TotalPages int `json:"totalPages"`
+}
+
+func paginate(x []string, skip int, size int) []string {
+    if skip > len(x) {
+        skip = len(x)
+    }
+
+    end := skip + size
+    if end > len(x) {
+        end = len(x)
+    }
+
+    return x[skip:end]
+}
+
 func handleSearch(searcher Searcher) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		query, ok := r.URL.Query()["q"]
@@ -48,10 +78,37 @@ func handleSearch(searcher Searcher) func(w http.ResponseWriter, r *http.Request
 			w.Write([]byte("missing search query in URL params"))
 			return
 		}
-		results := searcher.Search(query[0])
+		var err error
+		pageStr := r.URL.Query().Get("page")
+		page := 1
+		if pageStr != "" {
+			page, err = strconv.Atoi(pageStr)
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Println("Erorr", err)
+				fmt.Fprintf(w, "unable to parse page number")
+				return
+			}
+		}
+
+		querySearch := query[0]
+		cacheData, err := cache.Fetch(querySearch, time.Minute * 10, func() (interface{}, error) {
+				return searcher.Search(querySearch)
+		})
+		results := cacheData.Value().([]string)
+		resultLen := len(results)
+		totalPages := resultLen / resultLimit
+		res := APIResponse{
+			Result: paginate(results, page, resultLimit),
+			ResultCount: resultLen,
+			Limit: resultLimit,
+			Page: page,
+			TotalPages: totalPages,
+		}
+
 		buf := &bytes.Buffer{}
 		enc := json.NewEncoder(buf)
-		err := enc.Encode(results)
+		err = enc.Encode(res)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte("encoding failure"))
@@ -72,11 +129,16 @@ func (s *Searcher) Load(filename string) error {
 	return nil
 }
 
-func (s *Searcher) Search(query string) []string {
-	idxs := s.SuffixArray.Lookup([]byte(query), -1)
+func (s *Searcher) Search(query string) ([]string, error) {
+	reg, err := regexp.Compile(fmt.Sprintf("(?i).*%s.*", query))
+	if err != nil {
+		return []string{}, err
+	}
+
+	idxs := s.SuffixArray.FindAllIndex(reg, -1)
 	results := []string{}
 	for _, idx := range idxs {
-		results = append(results, s.CompleteWorks[idx-250:idx+250])
+		results = append(results, s.CompleteWorks[idx[0]-250:idx[1]+250])
 	}
-	return results
+	return results, nil
 }
