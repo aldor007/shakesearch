@@ -9,10 +9,9 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"time"
+	"regexp"
 	"strconv"
-     "regexp"
-
+	"time"
 
 	"github.com/karlseguin/ccache/v2"
 )
@@ -50,24 +49,24 @@ type Searcher struct {
 }
 
 type APIResponse struct {
-	Result []string `json:"results"`
-	ResultCount int `json:"resultCount"`
-	Limit int `json:"resultLimit"`
-	Page int `json:"page"`
-	TotalPages int `json:"totalPages"`
+	Result      []string `json:"results"`
+	ResultCount int      `json:"resultCount"`
+	Limit       int      `json:"resultLimit"`
+	Page        int      `json:"page"`
+	TotalPages  int      `json:"totalPages"`
 }
 
 func paginate(x []string, skip int, size int) []string {
-    if skip > len(x) {
-        skip = len(x)
-    }
+	if skip > len(x) {
+		skip = len(x)
+	}
 
-    end := skip + size
-    if end > len(x) {
-        end = len(x)
-    }
+	end := skip + size
+	if end > len(x) {
+		end = len(x)
+	}
 
-    return x[skip:end]
+	return x[skip:end]
 }
 
 func handleSearch(searcher Searcher) func(w http.ResponseWriter, r *http.Request) {
@@ -92,18 +91,18 @@ func handleSearch(searcher Searcher) func(w http.ResponseWriter, r *http.Request
 		}
 
 		querySearch := query[0]
-		cacheData, err := cache.Fetch(querySearch, time.Minute * 10, func() (interface{}, error) {
-				return searcher.Search(querySearch)
+		cacheData, err := cache.Fetch(querySearch, time.Minute*10, func() (interface{}, error) {
+			return searcher.Search(querySearch)
 		})
 		results := cacheData.Value().([]string)
 		resultLen := len(results)
 		totalPages := resultLen / resultLimit
 		res := APIResponse{
-			Result: paginate(results, page, resultLimit),
+			Result:      paginate(results, page, resultLimit),
 			ResultCount: resultLen,
-			Limit: resultLimit,
-			Page: page,
-			TotalPages: totalPages,
+			Limit:       resultLimit,
+			Page:        page,
+			TotalPages:  totalPages,
 		}
 
 		buf := &bytes.Buffer{}
